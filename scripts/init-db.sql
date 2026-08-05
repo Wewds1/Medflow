@@ -1,0 +1,7 @@
+CREATE DATABASE db_auth;
+CREATE DATABASE db_appts;
+CREATE DATABASE db_ehr;
+CREATE DATABASE db_triage;
+CREATE DATABASE db_pharmacy;
+CREATE DATABASE db_lis;
+CREATE DATABASE db_billing;
