@@ -6,8 +6,9 @@ MedFlow is a planned medical resource triage and clinical operations platform. T
 
 - Python virtual environment is set up
 - FastAPI has been installed
-- Application code has not been built yet
-- This repository currently serves as the starting point for the MedFlow backend
+- Docker Compose environment is active (PostgreSQL, Redis)
+- Seven bounded-context databases have been successfully provisioned
+- Moving from environment setup into the implementation of the first service
 
 ## Project Goal
 
@@ -46,11 +47,11 @@ pip install fastapi uvicorn[standard]
 
 ## Next Step
 
-The next implementation step is to decide whether to start with:
-
-1. Docker Compose plus the seven-database initialization script
-2. Pydantic v2 schemas and SQLAlchemy models for Phase 1 Auth and RBAC
+The project has entered **Phase 1: Foundation**. The immediate focus is the implementation of the **Auth and RBAC service skeleton**, including:
+- SQLAlchemy models for Users, Roles, and Permissions.
+- JWT issuance with RSA signing.
+- Shared JWT-decode dependency for other services.
 
 ## Notes
 
-The architecture plan for MedFlow is documented in [medflow.md](medflow.md).
+The architecture plan for MedFlow is documented in [PLAN.md](PLAN.md).
