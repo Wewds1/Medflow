@@ -1,6 +1,6 @@
 ﻿from sqlalchemy import Column, Integer, String, Boolean, ForeignKey, Table
 from sqlalchemy.orm import relationship
-from .database import Base
+from database import Base
 
 # Many-to-Many relationship tables
 user_roles = Table(
