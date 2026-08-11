@@ -21,17 +21,23 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     result = await db.execute(select(User).where(User.username == user.username))
     if result.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="Username already registered")
-    
+
     hashed_pwd = get_password_hash(user.password)
     db_user = User(
-        username=user.username, 
-        email=user.email, 
+        username=user.username,
+        email=user.email,
         hashed_password=hashed_pwd
     )
     db.add(db_user)
     await db.commit()
-    await db.refresh(db_user)
-    return db_user
+
+    # Fetch the user again with roles loaded to avoid MissingGreenlet in response serialization
+    result = await db.execute(
+        select(User)
+        .where(User.id == db_user.id)
+        .options(selectinload(User.roles))
+    )
+    return result.scalar_one()
 
 @app.post("/token", response_model=Token)
 async def login(user_credentials: UserCreate, db: AsyncSession = Depends(get_db)):

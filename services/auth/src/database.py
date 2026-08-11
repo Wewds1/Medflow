@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from pathlib import Path
 load_dotenv(r"D:\Meflow\services\auth\.env")
 
+print(f"DEBUG: ALL ENV VARS: {os.environ}")
 DATABASE_URL = os.getenv("DATABASE_URL")
 print(f"DEBUG: DATABASE_URL is {DATABASE_URL}")
 
