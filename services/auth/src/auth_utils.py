@@ -7,7 +7,7 @@ from dotenv import load_dotenv
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="legacy")
+pwd_context = CryptContext(schemes=["bcrypt"])
 SECRET_KEY = os.getenv("SECRET_KEY")
 ALGORITHM = "RS256" # Using Asymmetric signing as per plan
 
@@ -21,11 +21,17 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
     to_encode.update({"exp": expire})
-    
-    #  load the private key from RSA_PRIVATE_KEY_PATH
-    private_key = os.getenv("RSA_PRIVATE_KEY") or SECRET_KEY 
-    
+
+    # Load private key from RSA_PRIVATE_KEY_PATH in .env
+    key_path = os.getenv("RSA_PRIVATE_KEY_PATH", "private.pem")
+    try:
+        with open(key_path, "rb") as key_file:
+            private_key = key_file.read()
+    except FileNotFoundError:
+        raise RuntimeError(f"RSA private key not found at {key_path}. Please check your .env file.")
+
     return jwt.encode(to_encode, private_key, algorithm=ALGORITHM)
+
 
 def decode_access_token(token: str, public_key: str):
     try:
