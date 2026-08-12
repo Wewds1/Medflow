@@ -46,3 +46,7 @@ class Token(BaseModel):
 class TokenData(BaseModel):
     username: Optional[str] = None
     permissions: List[str] = []
+
+class RoleAssignment(BaseModel):
+    role_id: int
+
