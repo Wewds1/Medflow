@@ -18,10 +18,10 @@ def get_password_hash(password: str):
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
+from medflow_auth.jwt import create_access_token as shared_create_token, decode_access_token as shared_decode_token
+
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode = data.copy()
-    expire = datetime.now(timezone.utc) + (expires_delta or timedelta(minutes=15))
-    to_encode.update({"exp": expire})
 
     # Load private key from RSA_PRIVATE_KEY_PATH in .env
     key_path = os.getenv("RSA_PRIVATE_KEY_PATH", "private.pem")
@@ -31,12 +31,7 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     except FileNotFoundError:
         raise RuntimeError(f"RSA private key not found at {key_path}. Please check your .env file.")
 
-    return jwt.encode(to_encode, private_key, algorithm=ALGORITHM)
+    return shared_create_token(data, private_key, expires_delta)
 
-
-def decode_access_token(token: str, public_key: str):
-    try:
-        payload = jwt.decode(token, public_key, algorithms=[ALGORITHM])
-        return payload
-    except JWTError:
-        return None
+def decode_access_token(token: str, public_key: bytes):
+    return shared_decode_token(token, public_key)

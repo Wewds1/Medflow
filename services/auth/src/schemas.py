@@ -50,3 +50,8 @@ class TokenData(BaseModel):
 class RoleAssignment(BaseModel):
     role_id: int
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+

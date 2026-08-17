@@ -3,23 +3,18 @@ Database Seeding Script for MedFlow Auth Service.
 
 This script initializes the 'db_auth' database with comprehensive RBAC data
 covering all 7 bounded contexts of the MedFlow Ecosystem.
-
-Usage:
-    $env:PYTHONPATH = 'D:\Meflow\services\auth\src'
-    python services\auth\src\seed.py
 """
 import asyncio
 import os
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import create_async_engine, AsyncSession
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import sessionmaker, selectinload
 from dotenv import load_dotenv
 
 from database import Base
 from models import User, Role, Permission
 from auth_utils import get_password_hash
 
-# Load environment variables from the service's .env file
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
 DATABASE_URL = os.getenv("DATABASE_URL")
@@ -36,116 +31,85 @@ async def seed_db():
             await conn.run_sync(Base.metadata.create_all)
 
         async with session.begin():
-            # 1. Define Comprehensive Permissions for the 7 Bounded Contexts
+            # 1. Define Comprehensive Permissions
             permissions_map = {
-                # Auth & RBAC
                 "auth:manage": "Manage users, roles, and permissions",
                 "users:read": "Read user profiles",
-
-                # Appointments
                 "appts:read": "View appointment schedules",
                 "appts:write": "Create or modify appointments",
-
-                # EHR & Encounters
                 "ehr:read": "View patient clinical records",
                 "ehr:write": "Create or modify encounter notes",
-
-                # Triage & Risk
                 "triage:read": "View triage scores and alerts",
                 "triage:write": "Record vitals and NEWS2 scores",
-
-                # Pharmacy & Stock
                 "pharmacy:read": "View medication history",
                 "pharmacy:dispense": "Dispense medication from stock",
                 "pharmacy:inventory": "Manage medication inventory",
-
-                # Lab System (LIS)
                 "lis:read": "View lab results",
                 "lis:order": "Order lab tests",
-
-                # Billing & RCM
                 "billing:read": "View invoices and claims",
                 "billing:write": "Create or modify invoices",
             }
 
-            permissions = [Permission(name=k, description=v) for k, v in permissions_map.items()]
-            session.add_all(permissions)
-            await session.flush()
+            # Upsert Permissions
+            permissions_objs = {}
+            for name, desc in permissions_map.items():
+                res = await session.execute(select(Permission).where(Permission.name == name))
+                perm = res.scalar_one_or_none()
+                if not perm:
+                    perm = Permission(name=name, description=desc)
+                    session.add(perm)
+                permissions_objs[name] = perm
 
-            # Helper to get permission objects by name
-            def get_perms(names):
-                return [p for p in permissions if p.name in names]
+            await session.flush()
 
             # 2. Define Roles and map them to permissions
             roles_data = [
-                {
-                    "name": "Admin",
-                    "perms": list(permissions_map.keys())
-                },
-                {
-                    "name": "Doctor",
-                    "perms": [
-                        "appts:read", "ehr:read", "ehr:write",
-                        "triage:read", "lis:read", "lis:order", "pharmacy:read"
-                    ]
-                },
-                {
-                    "name": "Nurse",
-                    "perms": [
-                        "appts:read", "triage:write", "triage:read",
-                        "ehr:read", "lis:order"
-                    ]
-                },
-                {
-                    "name": "Pharmacist",
-                    "perms": [
-                        "pharmacy:dispense", "pharmacy:inventory",
-                        "pharmacy:read", "ehr:read"
-                    ]
-                },
-                {
-                    "name": "BillingClerk",
-                    "perms": [
-                        "billing:read", "billing:write", "appts:read", "users:read"
-                    ]
-                },
-                {
-                    "name": "FrontDesk",
-                    "perms": [
-                        "appts:read", "appts:write", "users:read"
-                    ]
-                },
+                {"name": "Admin", "perms": list(permissions_map.keys())},
+                {"name": "Doctor", "perms": ["appts:read", "ehr:read", "ehr:write", "triage:read", "lis:read", "lis:order", "pharmacy:read"]},
+                {"name": "Nurse", "perms": ["appts:read", "triage:write", "triage:read", "ehr:read", "lis:order"]},
+                {"name": "Pharmacist", "perms": ["pharmacy:dispense", "pharmacy:inventory", "pharmacy:read", "ehr:read"]},
+                {"name": "BillingClerk", "perms": ["billing:read", "billing:write", "appts:read", "users:read"]},
+                {"name": "FrontDesk", "perms": ["appts:read", "appts:write", "users:read"]},
             ]
 
-            roles = []
+            roles_objs = {}
             for rd in roles_data:
-                role = Role(name=rd["name"])
-                role.permissions = get_perms(rd["perms"])
-                roles.append(role)
+                res = await session.execute(
+                    select(Role).where(Role.name == rd["name"]).options(selectinload(Role.permissions))
+                )
+                role = res.scalar_one_or_none()
+                if not role:
+                    role = Role(name=rd["name"])
+                    session.add(role)
 
-            session.add_all(roles)
+                # Sync permissions for the role
+                target_perms = [permissions_objs[p_name] for p_name in rd["perms"]]
+                role.permissions = target_perms
+                roles_objs[rd["name"]] = role
+
             await session.flush()
 
             # 3. Create Default Admin User
-            # We check if the user exists first to allow re-running the script
-            result = await session.execute(select(User).where(User.username == "admin"))
-            if not result.scalar_one_or_none():
+            result = await session.execute(
+                select(User).where(User.username == "admin").options(selectinload(User.roles))
+            )
+            admin_user = result.scalar_one_or_none()
+            if not admin_user:
                 admin_user = User(
                     username="admin",
                     email="admin@medflow.local",
                     hashed_password=get_password_hash("admin123"),
                     is_active=True
                 )
-                # Assign the Admin role
-                admin_role = next(r for r in roles if r.name == "Admin")
-                admin_user.roles = [admin_role]
                 session.add(admin_user)
-                print("Default admin user created.")
-            else:
-                print("Admin user already exists, skipping creation.")
+
+            # Ensure admin has Admin role
+            admin_role = roles_objs["Admin"]
+            if admin_role not in admin_user.roles:
+                admin_user.roles.append(admin_role)
 
             await session.commit()
-            print("Database seeded successfully with comprehensive RBAC data!")
+            print("Database seeded successfully with idempotent RBAC data!")
 
 if __name__ == "__main__":
     asyncio.run(seed_db())

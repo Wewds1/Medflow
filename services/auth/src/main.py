@@ -4,7 +4,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from .database import get_db
 from .models import User, Role, Permission
-from .schemas import UserCreate, UserOut, Token, RoleAssignment
+from .schemas import UserCreate, UserOut, Token, RoleAssignment, LoginRequest
 from .auth_utils import get_password_hash, create_access_token, verify_password, decode_access_token
 import os
 from typing import List, Annotated
@@ -68,7 +68,9 @@ async def assign_role(
     _ = Depends(PermissionChecker("auth:manage"))
 ):
     # Fetch user and role
-    user_result = await db.execute(select(User).where(User.id == user_id))
+    user_result = await db.execute(
+        select(User).where(User.id == user_id).options(selectinload(User.roles))
+    )
     user = user_result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -93,7 +95,9 @@ async def remove_role(
     _ = Depends(PermissionChecker("auth:manage"))
 ):
     # Fetch user and role
-    user_result = await db.execute(select(User).where(User.id == user_id))
+    user_result = await db.execute(
+        select(User).where(User.id == user_id).options(selectinload(User.roles))
+    )
     user = user_result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -136,7 +140,7 @@ async def register(user: UserCreate, db: AsyncSession = Depends(get_db)):
     return result.scalar_one()
 
 @app.post("/token", response_model=Token)
-async def login(user_credentials: UserCreate, db: AsyncSession = Depends(get_db)):
+async def login(user_credentials: LoginRequest, db: AsyncSession = Depends(get_db)):
     # Fetch user with roles and permissions using selectinload to avoid N+1 queries
     result = await db.execute(
         select(User)
