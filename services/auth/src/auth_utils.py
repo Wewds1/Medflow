@@ -1,9 +1,9 @@
-﻿import os
-from datetime import datetime, timedelta, timezone
-from typing import List, Optional
-from jose import jwt, JWTError
+import os
+from datetime import timedelta
+from typing import Optional
 import bcrypt
 from dotenv import load_dotenv
+from medflow_auth.jwt import create_access_token as shared_create_token, decode_access_token as shared_decode_token
 
 load_dotenv(os.path.join(os.path.dirname(__file__), "..", ".env"))
 
@@ -18,11 +18,7 @@ def get_password_hash(password: str):
     hashed = bcrypt.hashpw(password.encode('utf-8'), salt)
     return hashed.decode('utf-8')
 
-from medflow_auth.jwt import create_access_token as shared_create_token, decode_access_token as shared_decode_token
-
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
-    to_encode = data.copy()
-
     # Load private key from RSA_PRIVATE_KEY_PATH in .env
     key_path = os.getenv("RSA_PRIVATE_KEY_PATH", "private.pem")
     try:
