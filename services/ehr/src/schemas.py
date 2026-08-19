@@ -41,3 +41,15 @@ class EncounterOut(EncounterBase):
 
     class Config:
         from_attributes = True
+
+class PrescriptionCreate(BaseModel):
+    patient_id: int
+    doctor_id: int
+    medication_name: str
+    dosage: str
+    quantity: int
+    instructions: Optional[str] = None
+
+class PrescriptionOut(BaseModel):
+    id: int
+    created_at: datetime

@@ -1,15 +1,17 @@
 import os
 import json
+import asyncio
 import redis.asyncio as redis
 from fastapi import FastAPI, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from typing import List, Optional
 from database import get_db
-from models import Patient, Encounter, EncounterType
-from schemas import PatientCreate, PatientOut, EncounterCreate, EncounterOut
+from models import Patient, Encounter, EncounterType, OutboxEvent
+from schemas import PatientCreate, PatientOut, EncounterCreate, EncounterOut, PrescriptionCreate, PrescriptionOut
 from dotenv import load_dotenv
 from pathlib import Path
+from datetime import datetime
 
 # Load env
 env_path = Path(__file__).parent.parent / ".env"
@@ -43,18 +45,15 @@ async def create_patient(patient: PatientCreate, db: AsyncSession = Depends(get_
 
 @app.get("/patients/{patient_id}", response_model=PatientOut)
 async def get_patient(patient_id: int, db: AsyncSession = Depends(get_db)):
-    # Try cache first
     cached = await get_cached_patient(patient_id)
     if cached:
         return cached
 
-    # DB lookup
     result = await db.execute(select(Patient).where(Patient.id == patient_id))
     patient = result.scalar_one_or_none()
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
 
-    # Cache the result
     patient_out = PatientOut.model_validate(patient).model_dump()
     await set_cached_patient(patient_id, patient_out)
 
@@ -72,10 +71,7 @@ async def update_patient(patient_id: int, patient_data: PatientCreate, db: Async
 
     await db.commit()
     await db.refresh(db_patient)
-
-    # Invalidate cache
     await invalidate_patient_cache(patient_id)
-
     return db_patient
 
 @app.post("/encounters", response_model=EncounterOut, status_code=status.HTTP_201_CREATED)
@@ -92,6 +88,25 @@ async def list_encounters(patient_id: int, db: AsyncSession = Depends(get_db)):
         select(Encounter).where(Encounter.patient_id == patient_id)
     )
     return result.scalars().all()
+
+@app.post("/prescriptions", status_code=status.HTTP_202_ACCEPTED)
+async def create_prescription(prescription: PrescriptionCreate, db: AsyncSession = Depends(get_db)):
+    """
+    Creates a prescription and writes an event to the outbox in the same transaction.
+    """
+    async with db.begin():
+        # 1. Logic for 'writing' the prescription would go here (e.g. into a prescriptions table)
+        # For now, we focus on the Outbox pattern.
+
+        # 2. Write to Outbox
+        event = OutboxEvent(
+            event_type="prescription_created",
+            payload=prescription.model_dump()
+        )
+        db.add(event)
+        # commit happens automatically by db.begin()
+
+    return {"status": "Prescription accepted and queued for fulfillment"}
 
 if __name__ == "__main__":
     import uvicorn
