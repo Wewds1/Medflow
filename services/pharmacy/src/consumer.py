@@ -10,6 +10,8 @@ from datetime import datetime
 
 from database import async_session
 from models import MedicationBatch, DispenseLog, BatchStatus
+import services
+
 
 # Load env
 env_path = Path(__file__).parent.parent / ".env"
@@ -26,41 +28,23 @@ async def process_prescription(payload: dict, db: AsyncSession):
 
     print(f"Processing prescription: {med_name} (qty: {qty_needed}) for patient {patient_id}")
 
-    # FIFO: Find the oldest active batch that has enough stock
-    # 1. Lock the oldest active batch for this medication
-    result = await db.execute(
-        select(MedicationBatch)
-        .where(MedicationBatch.medication_name == med_name, MedicationBatch.status == BatchStatus.ACTIVE)
-        .order_by(MedicationBatch.expiry_date.asc())
-        .with_for_update()
-    )
-    batch = result.scalar_one_or_none()
-
-    if not batch:
-        print(f"Error: No active batches found for {med_name}")
+    try:
+        log = await services.dispense_medication(
+            db=db,
+            med_name=med_name,
+            qty=qty_needed,
+            patient_id=patient_id,
+            staff_id=doctor_id
+        )
+        print(f"Successfully dispensed {qty_needed} of {med_name} from batch {log.batch_id}")
+        return True
+    except ValueError as e:
+        print(f"Dispense Error: {e}")
+        return False
+    except Exception as e:
+        print(f"Unexpected Error: {e}")
         return False
 
-    if batch.quantity < qty_needed:
-        print(f"Error: Insufficient stock in batch {batch.batch_number} (Available: {batch.quantity})")
-        return False
-
-    # 2. Deduct stock
-    batch.quantity -= qty_needed
-    if batch.quantity == 0:
-        batch.status = BatchStatus.DEPLETED
-
-    # 3. Log the dispense
-    log = DispenseLog(
-        patient_id=patient_id,
-        medication_name=med_name,
-        quantity_dispensed=qty_needed,
-        batch_id=batch.id,
-        staff_id=doctor_id
-    )
-    db.add(log)
-
-    print(f"Successfully dispensed {qty_needed} of {med_name} from batch {batch.batch_number}")
-    return True
 
 async def consume_events():
     print("Starting Pharmacy Event Consumer...")

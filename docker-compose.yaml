@@ -2,7 +2,9 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
     ports:
       - "5433:5432"
     volumes:
@@ -31,6 +33,74 @@ services:
       - medflow_net
     depends_on:
       - postgres
+
+  auth-service:
+    build: ./services/auth
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      RSA_PUBLIC_KEY_PATH: ${RSA_PUBLIC_KEY_PATH}
+      RSA_PRIVATE_KEY_PATH: ${RSA_PRIVATE_KEY_PATH}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - medflow_net
+
+  ehr-service:
+    build: ./services/ehr
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CORRELATION_ID_ENABLED: ${CORRELATION_ID_ENABLED}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - medflow_net
+
+  appointments-service:
+    build: ./services/appointments
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      CORRELATION_ID_ENABLED: ${CORRELATION_ID_ENABLED}
+    depends_on:
+      - postgres
+    networks:
+      - medflow_net
+
+  pharmacy-api:
+    build: ./services/pharmacy
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CORRELATION_ID_ENABLED: ${CORRELATION_ID_ENABLED}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - medflow_net
+
+  pharmacy-consumer:
+    build: ./services/pharmacy
+    command: python src/consumer.py
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL}
+      CORRELATION_ID_ENABLED: ${CORRELATION_ID_ENABLED}
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - medflow_net
 
 volumes:
   pg_data:
